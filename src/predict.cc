@@ -14,6 +14,9 @@
 #include "predictor.h"
 #include "my_predictor.h"
 
+#include <iostream>
+using namespace std;
+
 int main (int argc, char *argv[]) {
 
 	// make sure there is one parameter
@@ -29,11 +32,12 @@ int main (int argc, char *argv[]) {
 
 	// initialize competitor's branch prediction code
 
-	branch_predictor *p = new my_predictor ();
+	branch_predictor *p = new Piecewise ();
 
 	// some statistics to keep, currently just for conditional branches
 
 	long long int 
+		conditional_total = 0,
 		tmiss = 0, 	// number of target mispredictions
 		dmiss = 0; 	// number of direction mispredictions
 
@@ -64,6 +68,8 @@ int main (int argc, char *argv[]) {
 			// count a target misprediction
 
 			tmiss += u->target_prediction () != t->target;
+			
+			conditional_total++;
 		}
 
 		// update competitor's state
@@ -79,6 +85,7 @@ int main (int argc, char *argv[]) {
 	// each trace represents exactly 100 million instructions.
 
 	printf ("%0.3f MPKI\n", 1000.0 * (dmiss / 1e8));
+	printf ("%lf\n", (double)dmiss/(double)conditional_total);
 	delete p;
 	exit (0);
 }
