@@ -1,59 +1,10 @@
-// my_predictor.h
-// This file contains a sample my_predictor class.
-// It is a simple 32,768-entry gshare with a history length of 15.
-// Note that this predictor doesn't use the whole 8 kilobytes available
-// for the CBP-2 contest; it is just an example.
-
-class my_update : public branch_update {
-public:
-	unsigned int index;
-};
-
-class my_predictor : public branch_predictor {
-public:
-#define HISTORY_LENGTH	15
-#define TABLE_BITS	15
-	my_update u;
-	branch_info bi;
-	unsigned int history;
-	unsigned char tab[1<<TABLE_BITS];
-
-	my_predictor (void) : history(0) {
-		memset (tab, 0, sizeof (tab));
-	}
-
-	branch_update *predict (branch_info & b) {
-		bi = b;
-		if (b.br_flags & BR_CONDITIONAL) { // if the branch is conditional, it should be investigated further. Otherwise, it should always be taken.
-			u.index =
-				  (history << (TABLE_BITS - HISTORY_LENGTH))
-				^ (b.address & ((1<<TABLE_BITS)-1));
-			u.direction_prediction (tab[u.index] >> 1); // if tab[u.index] > 1 then predict it as taken, otherwise not taken.
-		} else {
-			u.direction_prediction (true);
-		}
-		u.target_prediction (0);
-		return &u;
-	}
-
-	void update (branch_update *u, bool taken, unsigned int target) {
-		if (bi.br_flags & BR_CONDITIONAL) {
-			unsigned char *c = &tab[((my_update*)u)->index];
-			// this may arise confusion about function variable u and class property u. Actually, I think there's no need for this method to take in an addition u, as update should be called everytime after predict is called. Test result shows that making u into this->u does not change the result.
-			if (taken) {
-				if (*c < 3) (*c)++;
-			} else {
-				if (*c > 0) (*c)--;
-			}
-			history <<= 1;
-			history |= taken; // mask last bit with taken
-			history &= (1<<HISTORY_LENGTH)-1; // mask history with 0b11111...1
-		}
-	}
-};
-
-
 //=============================================================================//
+// This is a predictor implemented using the specifications discribed in the paper
+// "Piecewise Linear Branch Predictor". There is also a customized queue class to
+// store addresses which are used by the algorithm, which avoids using stl queue
+// and may saves the computational overhead caused by stl queue.
+// To limit the space of the 3-dimension matrix W, I chose to do mod operation on 
+// first two indices using M and N.
 
 class my_update_piece : public branch_update {
 private:
@@ -63,9 +14,8 @@ public:
 	void set_output(int arg) {this->output = arg;} // setter of output
 };
 
-
+// Customized queue to store address. The length is fixed. Serve as GA in the paper.
 class AddressQueue {
-	// Customized queue to store address. The length is fixed. Serve as GA in the paper.
 	unsigned int* queue;
 	int front;
 	int back;
@@ -111,10 +61,17 @@ public:
 
 // Branch predictor from paper "Piecewise Linear Branch Prediction"
 // Derived from abstract class branch_predictor
+// ****************************************************************
 // Variables that takes up space: W & GA
-// W is a three-dimension matrix. Each of the element is a char type which takes 1 byte. Total space for W is M*N*(H+1) bytes.
-// GA is a queue(implemented using array) with max length H. Each element is unsigned which takes 4 bytes. Total 4*H bytes.
-// Other variables only takes constant space, we don't count them.
+// W is a three-dimension matrix. 
+// Each of the element is char typed which takes 1 byte. 
+// Total space for W is M*N*(H+1) bytes.
+// ****************************************************************
+// GA is a queue(implemented using array) with max length H. 
+// Each element is unsigned which takes 4 bytes. 
+// Total 4*H bytes.
+// ****************************************************************
+// Other variables only takes constant space, no need to count them.
 // Space: M*N*(H+1) + 4*H bytes 
 class Piecewise : public branch_predictor {
 #define M 8
