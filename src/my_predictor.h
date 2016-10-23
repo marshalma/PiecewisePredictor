@@ -3,20 +3,10 @@
 // It is a simple 32,768-entry gshare with a history length of 15.
 // Note that this predictor doesn't use the whole 8 kilobytes available
 // for the CBP-2 contest; it is just an example.
-#include <iostream>
-#include <deque>
-
-using namespace std;
 
 class my_update : public branch_update {
 public:
 	unsigned int index;
-};
-
-class my_update_piece : public branch_update {
-public:
-	int output;
-	void set_output(int arg) {this->output = arg;}
 };
 
 class my_predictor : public branch_predictor {
@@ -63,39 +53,52 @@ public:
 };
 
 
-class AddressQueue {
+//=============================================================================//
+
+class my_update_piece : public branch_update {
+private:
+	int output; // saves the last total weights, which will be needed in traning method
 public:
+	int get_output() {return this->output;} // getter of output
+	void set_output(int arg) {this->output = arg;} // setter of output
+};
+
+
+class AddressQueue {
+	// Customized queue to store address. The length is fixed. Serve as GA in the paper.
 	unsigned int* queue;
 	int front;
 	int back;
-	int size;
-	const int length;
-	AddressQueue(int n) : length(n), front(0), back(0), size(0) {
+	int _size;
+	const int length; // max length/capacity of the queue, which is fixed
+
+public:
+	AddressQueue(int n) : length(n), front(0), back(0), _size(0) {
 		this->queue = new unsigned int[n];
 	}
 
-	void push(unsigned int x) {
-		if (size == length) pop();
+	void push_back(unsigned int x) {
+		if (_size == length) pop_front();
 		queue[back] = x;
 		back = (back+1) % length;
-		size++;
+		_size++;
 	}
 
-	unsigned int qsize() {
-		return this->size;
+	unsigned int size() {
+		return this->_size;
 	}
 
-	unsigned int pop() {
-		if (size == 0) return 0;
+	unsigned int pop_front() {
+		if (_size == 0) return 0;
 		int res = queue[front];
 		front = (front + 1) % length;
-		size--;
+		_size--;
 		return res;
 	}
 
 	unsigned int operator[](unsigned int index) {
 		// [0] is the element at the back of the queue
-		if (index >= size) return 0;
+		if (index >= _size) return 0;
 		int modulo_index = (back - (int)index - 1 + length) % length;
 		return queue[modulo_index];
 	}
@@ -106,22 +109,28 @@ public:
 };
 
 
-
+// Branch predictor from paper "Piecewise Linear Branch Prediction"
+// Derived from abstract class branch_predictor
+// Variables that takes up space: W & GA
+// W is a three-dimension matrix. Each of the element is a char type which takes 1 byte. Total space for W is M*N*(H+1) bytes.
+// GA is a queue(implemented using array) with max length H. Each element is unsigned which takes 4 bytes. Total 4*H bytes.
+// Other variables only takes constant space, we don't count them.
+// Space: M*N*(H+1) + 4*H bytes 
 class Piecewise : public branch_predictor {
-#define M 128
-#define N 4
-#define H 19
+#define M 8
+#define N 32
+#define H 30
 #define THETA 2.14 * (H+1) + 20.58
 
 private:
 	char W[N][M][H+1];
 	unsigned int GHR = 0;
-	deque<unsigned int> GA;
+	AddressQueue GA;
 	my_update_piece u;
 	branch_info bi;
 
 public:
-	Piecewise(void) {
+	Piecewise(void): GA(H) {
 		memset(W, 0, sizeof(W));
 	}
 
@@ -130,12 +139,14 @@ public:
 		int res = W[address_modn][0][0];
 
 		bi = b;
-		if (bi.br_flags & BR_CONDITIONAL) { // if the branch is conditional, it should be investigated further. Otherwise, it should always be taken.
+		if (bi.br_flags & BR_CONDITIONAL) { 
+			// If the branch is conditional, it should be investigated further. 
+			// Otherwise, the branch should always be taken.
+			// The following for loop sums the weights.
 			for (int i = 0; i < GA.size(); i++) {
-				int second_index = *(GA.rbegin()+i) % M;
+				int second_index = GA[i] % M;
 				char thisweight = W[address_modn][second_index][i];
-				int intweight = (GHR & (1 << (i-1)))?(int)thisweight:-(int)thisweight;
-				res += intweight;
+				res += (GHR & (1 << (i-1)))?(int)thisweight:-(int)thisweight;
 			}
 			u.set_output(res);
 			u.direction_prediction(res>=0);
@@ -150,19 +161,32 @@ public:
 	void update(branch_update* u, bool taken, unsigned int target) {
 		if (!(bi.br_flags & BR_CONDITIONAL)) return;
 		int address_modn = bi.address % N;
-		if (abs(((my_update_piece*)u)->output) < THETA || taken != u->direction_prediction()) {
-			if (taken && W[address_modn][0][0] < 127) W[address_modn][0][0]++;
-			if (!taken && W[address_modn][0][0] > -127) W[address_modn][0][0]--;
+		
+		// update bias
+		if (abs(((my_update_piece*)u)->get_output()) < THETA || taken != u->direction_prediction()) {
+			// using saturating arithmetic
+			if (taken && W[address_modn][0][0] < 127) 
+				W[address_modn][0][0]++;
+			if (!taken && W[address_modn][0][0] > -127) 
+				W[address_modn][0][0]--;
 		}
+		
+		// update weights other than bias
 		for (int i = 0; i < GA.size(); i++) {
-			int second_index = *(GA.rbegin()+i) % M;
-			if ((((GHR & (1 << (i-1))) > 0) == taken) && W[address_modn][second_index][i] < 127) W[address_modn][second_index][i]++;
-			if (!(((GHR & (1 << (i-1))) > 0) == taken) && W[address_modn][second_index][i] > -127) W[address_modn][second_index][i]--;
+			int second_index = GA[i] % M;
+			// using saturating arithmetic
+			if ((((GHR & (1 << (i-1))) > 0) == taken) && W[address_modn][second_index][i] < 127) 
+				W[address_modn][second_index][i]++;
+			if (!(((GHR & (1 << (i-1))) > 0) == taken) && W[address_modn][second_index][i] > -127) 
+				W[address_modn][second_index][i]--;
 		}
+		
+		// update GA
 		GA.push_back(bi.address);
-		if (GA.size() > H) GA.pop_front();
-		GHR <<= 1;
-		GHR |= taken;
-		GHR &= (1 << H) - 1;
+		
+		// update GHR
+		GHR <<= 1; // shifting GHR to make up a slot for current "taken"
+		GHR |= taken; // pushing current "taken" into GHR
+		GHR &= (1 << H) - 1; // masking GHR with 11..1 of length H
 	}
 };
