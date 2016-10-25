@@ -13,6 +13,7 @@
 #include "trace.h"
 #include "predictor.h"
 #include "my_predictor.h"
+#include "piecewise.h"
 
 #include <iostream>
 using namespace std;

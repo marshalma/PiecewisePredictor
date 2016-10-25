@@ -1,0 +1,60 @@
+./traces/164.gzip/gzip.trace
+12.082 MPKI
+0.079936
+./traces/175.vpr/vpr.trace
+15.602 MPKI
+0.121633
+./traces/176.gcc/gcc.trace
+25.632 MPKI
+0.150040
+./traces/181.mcf/mcf.trace
+21.511 MPKI
+0.099127
+./traces/186.crafty/crafty.trace
+13.760 MPKI
+0.154136
+./traces/197.parser/parser.trace
+17.803 MPKI
+0.125452
+./traces/201.compress/compress.trace
+11.763 MPKI
+0.099983
+./traces/202.jess/jess.trace
+4.508 MPKI
+0.031846
+./traces/205.raytrace/raytrace.trace
+5.979 MPKI
+0.049001
+./traces/209.db/db.trace
+6.198 MPKI
+0.046984
+./traces/213.javac/javac.trace
+7.049 MPKI
+0.054276
+./traces/222.mpegaudio/mpegaudio.trace
+6.736 MPKI
+0.051732
+./traces/227.mtrt/mtrt.trace
+5.624 MPKI
+0.044945
+./traces/228.jack/jack.trace
+8.701 MPKI
+0.072955
+./traces/252.eon/eon.trace
+10.181 MPKI
+0.131793
+./traces/253.perlbmk/perlbmk.trace
+11.746 MPKI
+0.086768
+./traces/254.gap/gap.trace
+10.517 MPKI
+0.076003
+./traces/255.vortex/vortex.trace
+4.392 MPKI
+0.039658
+./traces/256.bzip2/bzip2.trace
+0.200 MPKI
+0.000813
+./traces/300.twolf/twolf.trace
+25.817 MPKI
+0.197091
